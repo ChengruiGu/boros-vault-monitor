@@ -1,0 +1,122 @@
+[
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "amm",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "isPositive",
+        "type": "bool"
+      },
+      {
+        "components": [
+          {
+            "internalType": "AMMId",
+            "name": "ammId",
+            "type": "uint24"
+          },
+          {
+            "internalType": "string",
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "symbol",
+            "type": "string"
+          },
+          {
+            "internalType": "address",
+            "name": "router",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "market",
+            "type": "address"
+          },
+          {
+            "internalType": "uint32",
+            "name": "oracleImpliedRateWindow",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "feeRate",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint256",
+            "name": "totalSupplyCap",
+            "type": "uint256"
+          },
+          {
+            "internalType": "MarketAcc",
+            "name": "seeder",
+            "type": "bytes26"
+          },
+          {
+            "internalType": "address",
+            "name": "permissionController",
+            "type": "address"
+          }
+        ],
+        "indexed": false,
+        "internalType": "struct AMMCreateParams",
+        "name": "createParams",
+        "type": "tuple"
+      },
+      {
+        "components": [
+          {
+            "internalType": "uint256",
+            "name": "minAbsRate",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "maxAbsRate",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "cutOffTimestamp",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "initialAbsRate",
+            "type": "uint256"
+          },
+          {
+            "internalType": "int256",
+            "name": "initialSize",
+            "type": "int256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "flipLiquidity",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "initialCash",
+            "type": "uint256"
+          }
+        ],
+        "indexed": false,
+        "internalType": "struct AMMSeedParams",
+        "name": "seedParams",
+        "type": "tuple"
+      }
+    ],
+    "name": "AMMCreated",
+    "type": "event"
+  }
+]

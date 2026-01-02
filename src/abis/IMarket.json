@@ -1,0 +1,72 @@
+[
+  {
+    "inputs": [],
+    "name": "getLatestFTime",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "descriptor",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "isIsolatedOnly",
+        "type": "bool"
+      },
+      {
+        "internalType": "bytes16",
+        "name": "tokenId",
+        "type": "bytes16"
+      },
+      {
+        "internalType": "bytes24",
+        "name": "marketId",
+        "type": "bytes24"
+      },
+      {
+        "internalType": "uint32",
+        "name": "maturity",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint8",
+        "name": "tickStep",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint16",
+        "name": "iTickThresh",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint32",
+        "name": "latestFTime",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "symbol",
+    "outputs": [
+      {
+        "internalType": "string",
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  }
+]
+

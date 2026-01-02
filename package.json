@@ -1,0 +1,25 @@
+{
+  "name": "boros-vault-monitor",
+  "version": "1.0.0",
+  "description": "Telegram bot to monitor Boros vault creation and cap updates",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "watch": "tsc --watch",
+    "query-events": "ts-node scripts/query-events.ts"
+  },
+  "dependencies": {
+    "ethers": "^6.13.0",
+    "node-telegram-bot-api": "^0.66.0",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/node-telegram-bot-api": "^0.64.0",
+    "typescript": "^5.3.3",
+    "ts-node": "^10.9.2"
+  }
+}
+

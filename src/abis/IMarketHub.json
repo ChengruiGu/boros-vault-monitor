@@ -1,0 +1,22 @@
+[
+  {
+    "inputs": [
+      {
+        "internalType": "bytes16",
+        "name": "tokenId",
+        "type": "bytes16"
+      }
+    ],
+    "name": "tokenIdToAddress",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  }
+]
+
