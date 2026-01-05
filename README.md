@@ -21,21 +21,63 @@ A Telegram bot that monitors Boros vault (AMM) creation and cap updates on Arbit
 1. Open Telegram and search for [@BotFather](https://t.me/botfather)
 2. Send `/newbot` and follow the instructions
 3. Copy the bot token you receive
-4. Send `/newchat` to create a chat/channel, or use your personal chat ID
-5. To get your chat ID:
-   - Start a chat with your bot
-   - Send a message to your bot
-   - Visit: `https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates`
-   - Find your chat ID in the response
 
-### 2. Install Dependencies
+### 2. Get Chat ID (for Personal Chat)
+
+1. Start a chat with your bot
+2. Send a message to your bot
+3. Visit: `https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates`
+4. Find your chat ID in the response (it will be a number like `123456789`)
+
+### 3. Get Channel ID (for Channel)
+
+**Option A: Using a Public Channel**
+1. Create a public channel in Telegram
+2. Add your bot as an administrator (Channel Settings → Administrators → Add Administrator)
+3. Give the bot permission to "Post Messages"
+4. The channel ID is the channel username (e.g., `@your_channel_name`)
+
+**Option B: Using a Private Channel**
+1. Create a private channel in Telegram
+2. Add your bot as an administrator (Channel Settings → Administrators → Add Administrator)
+3. Give the bot permission to "Post Messages"
+4. To get the channel ID:
+   - Forward a message from your channel to [@userinfobot](https://t.me/userinfobot)
+   - Or use this method:
+     - Add [@RawDataBot](https://t.me/RawDataBot) to your channel
+     - It will show the channel ID (usually starts with `-100`)
+   - Or visit: `https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates` after the bot posts a message
+   - Look for `"chat":{"id":-1001234567890}` - the negative number is your channel ID
+
+**Important Notes:**
+- Channel IDs are usually negative numbers (e.g., `-1001234567890`)
+- The bot **must** be an administrator of the channel
+- The bot needs "Post Messages" permission
+- For private channels, you can use the numeric ID (e.g., `-1001234567890`)
+- For public channels, you can use the username (e.g., `@your_channel_name`)
+
+### 2. Get Your Chat/Channel ID
+
+**Easy Method (Recommended):**
+1. Run the helper script:
+   ```bash
+   npm run get-telegram-id
+   ```
+2. For personal chat: Send a message to your bot
+3. For channel: Add the bot as admin, then send a message in the channel
+4. The script will display your Chat ID or Channel ID
+
+**Manual Method:**
+- See detailed instructions in the README below
+
+### 3. Install Dependencies
 
 ```bash
 cd vault-monitor
 npm install
 ```
 
-### 3. Configure Environment
+### 4. Configure Environment
 
 ```bash
 cp .env.example .env
@@ -46,7 +88,7 @@ Edit `.env` and fill in:
 - `TELEGRAM_CHAT_ID`: Your Telegram chat ID
 - `RPC_URL`: Arbitrum RPC endpoint (default works, but consider using Infura/Alchemy for better rate limits)
 
-### 4. Build and Run
+### 5. Build and Run
 
 ```bash
 # Build TypeScript
@@ -148,6 +190,12 @@ Then:
 sudo systemctl enable vault-monitor
 sudo systemctl start vault-monitor
 ```
+
+## Deployment
+
+See [DEPLOYMENT.md](./DEPLOYMENT.md) for detailed AWS deployment instructions.
+
+**Quick recommendation**: Use **AWS Lightsail** ($5/month) for the simplest setup.
 
 ## Troubleshooting
 

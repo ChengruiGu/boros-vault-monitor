@@ -17,6 +17,11 @@ export class VaultMonitor {
   private stateManager: StateManager;
   private notifier: TelegramNotifier;
   private isRunning: boolean = false;
+  
+  // Cache for live vaults message
+  private cachedLiveVaultsMessage: string | null = null;
+  private cachedLiveVaultsTimestamp: number = 0;
+  private readonly LIVE_VAULTS_CACHE_TTL_MS = 30000; // 30 seconds
 
   constructor() {
     this.provider = new ethers.JsonRpcProvider(CONFIG.RPC_URL);
@@ -65,6 +70,21 @@ export class VaultMonitor {
   private async handleLiveVaultsCommand(msg: TelegramBot.Message): Promise<void> {
     try {
       const chatId = msg.chat.id;
+      
+      // Check if we have a valid cached message
+      const now = Date.now();
+      const cacheAge = now - this.cachedLiveVaultsTimestamp;
+      
+      if (this.cachedLiveVaultsMessage && cacheAge < this.LIVE_VAULTS_CACHE_TTL_MS) {
+        // Use cached message
+        await this.notifier.getBot().sendMessage(chatId, this.cachedLiveVaultsMessage, {
+          parse_mode: 'Markdown',
+          disable_web_page_preview: true,
+        });
+        return;
+      }
+
+      // Cache expired or doesn't exist, fetch fresh data
       await this.notifier.getBot().sendMessage(chatId, '📊 Fetching live vaults...', {
         parse_mode: 'Markdown',
       });
@@ -72,13 +92,21 @@ export class VaultMonitor {
       const liveVaults = await this.getLiveVaults();
       
       if (liveVaults.length === 0) {
-        await this.notifier.getBot().sendMessage(chatId, '❌ No live vaults found.', {
+        const emptyMessage = '❌ No live vaults found.';
+        this.cachedLiveVaultsMessage = emptyMessage;
+        this.cachedLiveVaultsTimestamp = now;
+        await this.notifier.getBot().sendMessage(chatId, emptyMessage, {
           parse_mode: 'Markdown',
         });
         return;
       }
 
       const message = this.formatLiveVaultsList(liveVaults);
+      
+      // Update cache
+      this.cachedLiveVaultsMessage = message;
+      this.cachedLiveVaultsTimestamp = now;
+      
       await this.notifier.getBot().sendMessage(chatId, message, {
         parse_mode: 'Markdown',
         disable_web_page_preview: true,
@@ -89,6 +117,11 @@ export class VaultMonitor {
         parse_mode: 'Markdown',
       });
     }
+  }
+  
+  private invalidateLiveVaultsCache(): void {
+    this.cachedLiveVaultsMessage = null;
+    this.cachedLiveVaultsTimestamp = 0;
   }
 
   private async getLiveVaults(): Promise<Array<VaultState & { depositCurrency: string; utilization: number }>> {
@@ -122,11 +155,19 @@ export class VaultMonitor {
         // Get deposit currency (token symbol)
         let depositCurrency = vault.symbol; // Fallback to vault symbol
         try {
-          const [, tokenId] = await marketContract.descriptor();
-          const tokenAddress = await this.marketHub.tokenIdToAddress(tokenId);
-          if (tokenAddress && tokenAddress !== ethers.ZeroAddress) {
-            const tokenContract = new ethers.Contract(tokenAddress, ERC20ABI, this.provider);
-            depositCurrency = await tokenContract.symbol();
+          const descriptorResult = await marketContract.descriptor();
+          const tokenId = descriptorResult[1]; // tokenId is at index 1
+          
+          // Check if tokenId is valid (not zero)
+          // TokenId is a uint16 wrapped type, check if it's not zero
+          // In ethers.js, custom types are returned as their underlying value
+          const tokenIdValue = typeof tokenId === 'bigint' ? tokenId : BigInt(tokenId);
+          if (tokenIdValue !== 0n) {
+            const tokenAddress = await this.marketHub.tokenIdToAddress(tokenId);
+            if (tokenAddress && tokenAddress !== ethers.ZeroAddress) {
+              const tokenContract = new ethers.Contract(tokenAddress, ERC20ABI, this.provider);
+              depositCurrency = await tokenContract.symbol();
+            }
           }
         } catch (error) {
           console.warn(`Could not get token symbol for vault ${vault.address}:`, error);
@@ -167,8 +208,11 @@ export class VaultMonitor {
       const maturityDate = new Date(Number(vault.maturity) * 1000).toLocaleDateString();
       const available = vault.totalSupplyCap - vault.lastKnownTotalSupply;
       const status = vault.utilization < 100 ? '🟢' : '🔴';
+      
+      // Remove "Boros AMM - " prefix from vault name
+      const displayName = vault.name.replace(/^Boros AMM - /, '');
 
-      message += `${i + 1}. ${status} *${vault.name}*\n`;
+      message += `${i + 1}. ${status} *${displayName}*\n`;
       message += `   💰 Currency: ${vault.depositCurrency}\n`;
       message += `   📅 Expires: ${maturityDate}\n`;
       message += `   📊 Utilization: ${vault.utilization.toFixed(2)}%\n`;
@@ -484,6 +528,9 @@ export class VaultMonitor {
           };
 
           this.stateManager.addVault(vault);
+          
+          // Invalidate cache when new vault is added
+          this.invalidateLiveVaultsCache();
 
           // Only notify if vault is not expired
           if (!isExpired) {
@@ -541,6 +588,9 @@ export class VaultMonitor {
               isFilled: isNowFilled,
               lastCheckedBlock: event.blockNumber,
             });
+            
+            // Invalidate cache when cap is updated
+            this.invalidateLiveVaultsCache();
 
             // Notify about cap raise (only for live vaults)
             await this.notifier.notifyCapRaised(
@@ -589,6 +639,8 @@ export class VaultMonitor {
       // Update if cap changed
       if (totalSupplyCap !== vault.totalSupplyCap) {
         console.log(`Cap changed for ${vault.address}: ${vault.totalSupplyCap} -> ${totalSupplyCap}`);
+        // Invalidate cache when cap changes
+        this.invalidateLiveVaultsCache();
         await this.notifier.notifyCapRaised(
           { ...vault, totalSupplyCap, lastKnownTotalSupply: totalSupply },
           vault.totalSupplyCap,
@@ -599,6 +651,8 @@ export class VaultMonitor {
 
       // Update if fill status changed
       if (wasFilled !== isNowFilled) {
+        // Invalidate cache when fill status changes
+        this.invalidateLiveVaultsCache();
         if (isNowFilled) {
           await this.notifier.notifyVaultFilled({
             ...vault,

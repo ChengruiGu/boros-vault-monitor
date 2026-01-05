@@ -1,0 +1,75 @@
+[
+  {
+    "type": "event",
+    "name": "AddLiquidityDualToAmm",
+    "inputs": [
+      {
+        "name": "user",
+        "type": "bytes26",
+        "indexed": true
+      },
+      {
+        "name": "ammId",
+        "type": "uint24",
+        "indexed": true
+      },
+      {
+        "name": "exactSizeIn",
+        "type": "int256",
+        "indexed": false
+      },
+      {
+        "name": "netLpOut",
+        "type": "uint256",
+        "indexed": false
+      },
+      {
+        "name": "netCashIn",
+        "type": "int256",
+        "indexed": false
+      },
+      {
+        "name": "netOtcFee",
+        "type": "uint256",
+        "indexed": false
+      }
+    ]
+  },
+  {
+    "type": "event",
+    "name": "AddLiquiditySingleCashToAmm",
+    "inputs": [
+      {
+        "name": "user",
+        "type": "bytes26",
+        "indexed": true
+      },
+      {
+        "name": "ammId",
+        "type": "uint24",
+        "indexed": true
+      },
+      {
+        "name": "netLpOut",
+        "type": "uint256",
+        "indexed": false
+      },
+      {
+        "name": "netCashIn",
+        "type": "int256",
+        "indexed": false
+      },
+      {
+        "name": "totalTakerOtcFee",
+        "type": "uint256",
+        "indexed": false
+      },
+      {
+        "name": "swapSizeInterm",
+        "type": "int256",
+        "indexed": false
+      }
+    ]
+  }
+]
+

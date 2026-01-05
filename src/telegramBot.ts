@@ -10,7 +10,7 @@ export class TelegramNotifier {
     if (!CONFIG.TELEGRAM_BOT_TOKEN) {
       throw new Error('TELEGRAM_BOT_TOKEN is required');
     }
-    this.bot = new TelegramBot(CONFIG.TELEGRAM_BOT_TOKEN);
+    this.bot = new TelegramBot(CONFIG.TELEGRAM_BOT_TOKEN, { polling: true });
     this.setupCommandHandlers();
   }
 
