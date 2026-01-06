@@ -105,6 +105,28 @@ export class TelegramNotifier {
     await this.sendMessage(message);
   }
 
+  async notifyVaultAvailable(vault: VaultState, currentSupply: bigint): Promise<void> {
+    const arbiscanUrl = `https://arbiscan.io/address/${vault.address}`;
+    const maturityDate = new Date(Number(vault.maturity) * 1000).toLocaleString();
+    const available = vault.totalSupplyCap - currentSupply;
+    
+    const message = `
+🟢 *Vault Available Again!*
+
+*Vault:* ${vault.name} (${vault.symbol})
+*Address:* \`${vault.address}\`
+
+*Cap:* ${this.formatNumber(vault.totalSupplyCap)}
+*Current Supply:* ${this.formatNumber(currentSupply)}
+*Available Space:* ${this.formatNumber(available)}
+*Maturity:* ${maturityDate}
+
+[View on Arbiscan](${arbiscanUrl})
+    `.trim();
+
+    await this.sendMessage(message);
+  }
+
   private async sendMessage(text: string): Promise<void> {
     try {
       await this.bot.sendMessage(CONFIG.TELEGRAM_CHAT_ID, text, {

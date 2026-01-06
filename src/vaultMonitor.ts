@@ -22,6 +22,10 @@ export class VaultMonitor {
   private cachedLiveVaultsMessage: string | null = null;
   private cachedLiveVaultsTimestamp: number = 0;
   private readonly LIVE_VAULTS_CACHE_TTL_MS = 30000; // 30 seconds
+  
+  // Periodic status check tracking
+  private lastStatusCheckBlock: number = 0;
+  private readonly STATUS_CHECK_INTERVAL_BLOCKS = 120; 
 
   constructor() {
     this.provider = new ethers.JsonRpcProvider(CONFIG.RPC_URL);
@@ -464,6 +468,14 @@ export class VaultMonitor {
           // Monitor cap updates for existing vaults
           await this.monitorCapUpdates(fromBlock, currentBlock);
           
+          // Periodically check all vault statuses to detect withdrawals
+          // This allows us to detect when filled vaults become available again
+          if (currentBlock - this.lastStatusCheckBlock >= this.STATUS_CHECK_INTERVAL_BLOCKS) {
+            console.log(`Performing periodic status check for all vaults at block ${currentBlock}`);
+            await this.checkAllVaultStatuses();
+            this.lastStatusCheckBlock = currentBlock;
+          }
+          
           // Update last processed block
           const newState = this.stateManager.loadState();
           newState.lastProcessedBlock = currentBlock;
@@ -615,6 +627,20 @@ export class VaultMonitor {
     }
   }
 
+  private async checkAllVaultStatuses(): Promise<void> {
+    const allVaults = this.stateManager.getAllVaults();
+    console.log(`Checking status for ${allVaults.length} vaults...`);
+    
+    // Check all vaults in parallel (with some concurrency limit to avoid overwhelming RPC)
+    const BATCH_SIZE = 5;
+    for (let i = 0; i < allVaults.length; i += BATCH_SIZE) {
+      const batch = allVaults.slice(i, i + BATCH_SIZE);
+      await Promise.all(
+        batch.map(vault => this.checkVaultStatus(vault))
+      );
+    }
+  }
+
   private async checkVaultStatus(vault: VaultState): Promise<void> {
     try {
       // Check if vault is expired
@@ -654,12 +680,24 @@ export class VaultMonitor {
         // Invalidate cache when fill status changes
         this.invalidateLiveVaultsCache();
         if (isNowFilled) {
+          // Vault became filled
           await this.notifier.notifyVaultFilled({
             ...vault,
             totalSupplyCap,
             lastKnownTotalSupply: totalSupply,
             isFilled: true,
           });
+        } else if (wasFilled) {
+          // Vault was filled but is now available again (withdrawals happened)
+          await this.notifier.notifyVaultAvailable(
+            {
+              ...vault,
+              totalSupplyCap,
+              lastKnownTotalSupply: totalSupply,
+              isFilled: false,
+            },
+            totalSupply
+          );
         }
       }
 
