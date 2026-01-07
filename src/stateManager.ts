@@ -34,6 +34,7 @@ export class StateManager {
             marketAddress: v.marketAddress || '',
             lastCheckedBlock: v.lastCheckedBlock || 0,
             createdAt: v.createdAt || Date.now(),
+            depositTokenSymbol: v.depositTokenSymbol || undefined,
           };
         }
 
@@ -69,6 +70,7 @@ export class StateManager {
           marketAddress: vault.marketAddress,
           lastCheckedBlock: vault.lastCheckedBlock,
           createdAt: vault.createdAt,
+          depositTokenSymbol: vault.depositTokenSymbol,
         };
       }
 

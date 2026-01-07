@@ -9,6 +9,7 @@ export interface VaultState {
   marketAddress: string; // Market contract address
   lastCheckedBlock: number;
   createdAt: number;
+  depositTokenSymbol?: string; // Human-readable token symbol (e.g., "BTC", "USDT", "ETH")
 }
 
 export interface MonitorState {

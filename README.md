@@ -112,13 +112,16 @@ npm run dev
 | `MARKET_HUB_ADDRESS` | Market Hub contract address | `0x1080808080f145b14228443212e62447C112ADaD` |
 | `POLL_INTERVAL_MS` | Polling interval in milliseconds | `12000` (12 seconds) |
 | `START_BLOCK` | Block number to start monitoring from | Latest block |
+| `FILLED_THRESHOLD_PERCENT` | Utilization % at which vault is considered filled | `98` (98%) |
 | `STATE_FILE` | Path to state file | `./vault-state.json` |
 
 ## How It Works
 
 1. **New Vault Detection**: Monitors `AMMCreated` events from the AMM Factory
 2. **Cap Update Detection**: Monitors `TotalSupplyCapUpdated` events from each AMM contract
-3. **Status Checking**: Periodically checks if vaults are filled (totalSupply >= totalSupplyCap)
+3. **Status Checking**: Periodically checks if vaults are filled based on utilization threshold (default: 98%)
+   - A vault is considered filled when: `(currentSupply / totalSupplyCap) * 100 >= FILLED_THRESHOLD_PERCENT`
+   - This means vaults with only a few dollars remaining are still considered "practically filled"
 4. **Expiration Filtering**: Automatically filters out expired vaults (maturity reached)
 5. **Notifications**: Sends Telegram messages when:
    - New vault is created (with status: available or filled)

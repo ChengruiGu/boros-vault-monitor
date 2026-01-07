@@ -15,6 +15,7 @@ export const CONFIG = {
   // Monitoring Configuration
   POLL_INTERVAL_MS: parseInt(process.env.POLL_INTERVAL_MS || '12000'), // 12 seconds (Arbitrum block time ~12s)
   START_BLOCK: process.env.START_BLOCK ? parseInt(process.env.START_BLOCK) : undefined,
+  FILLED_THRESHOLD_PERCENT: parseFloat(process.env.FILLED_THRESHOLD_PERCENT || '98'), // Vault is considered filled at this utilization % (default 98%)
   
   // State file
   STATE_FILE: process.env.STATE_FILE || './vault-state.json',

@@ -38,16 +38,22 @@ export class TelegramNotifier {
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
   }
 
+  private getTokenSymbol(vault: VaultState): string {
+    return vault.depositTokenSymbol || 'N/A';
+  }
+
   async notifyNewVault(vault: VaultState, isFilled: boolean): Promise<void> {
     const arbiscanUrl = `https://arbiscan.io/address/${vault.address}`;
     const status = isFilled ? '🔴 FULLY FILLED' : '🟢 AVAILABLE';
     const maturityDate = new Date(Number(vault.maturity) * 1000).toLocaleString();
+    const tokenSymbol = this.getTokenSymbol(vault);
     
     const message = `
 🚀 *New Vault Created!*
 
 *Name:* ${vault.name}
 *Symbol:* ${vault.symbol}
+*🪙 Token:* ${tokenSymbol}
 *Address:* \`${vault.address}\`
 *Status:* ${status}
 
@@ -66,11 +72,13 @@ export class TelegramNotifier {
     const isNowAvailable = currentSupply < newCap;
     const status = isNowAvailable ? '🟢 NOW AVAILABLE' : '🔴 STILL FULL';
     const maturityDate = new Date(Number(vault.maturity) * 1000).toLocaleString();
+    const tokenSymbol = this.getTokenSymbol(vault);
     
     const message = `
 📈 *Vault Cap Raised!*
 
 *Vault:* ${vault.name} (${vault.symbol})
+*🪙 Token:* ${tokenSymbol}
 *Address:* \`${vault.address}\`
 *Status:* ${status}
 
@@ -89,11 +97,13 @@ export class TelegramNotifier {
 
   async notifyVaultFilled(vault: VaultState): Promise<void> {
     const arbiscanUrl = `https://arbiscan.io/address/${vault.address}`;
+    const tokenSymbol = this.getTokenSymbol(vault);
     
     const message = `
 🔴 *Vault Filled!*
 
 *Vault:* ${vault.name} (${vault.symbol})
+*🪙 Token:* ${tokenSymbol}
 *Address:* \`${vault.address}\`
 
 *Cap:* ${this.formatNumber(vault.totalSupplyCap)}
@@ -109,11 +119,13 @@ export class TelegramNotifier {
     const arbiscanUrl = `https://arbiscan.io/address/${vault.address}`;
     const maturityDate = new Date(Number(vault.maturity) * 1000).toLocaleString();
     const available = vault.totalSupplyCap - currentSupply;
+    const tokenSymbol = this.getTokenSymbol(vault);
     
     const message = `
 🟢 *Vault Available Again!*
 
 *Vault:* ${vault.name} (${vault.symbol})
+*🪙 Token:* ${tokenSymbol}
 *Address:* \`${vault.address}\`
 
 *Cap:* ${this.formatNumber(vault.totalSupplyCap)}

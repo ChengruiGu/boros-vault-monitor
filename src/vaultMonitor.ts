@@ -50,6 +50,25 @@ export class VaultMonitor {
     });
   }
 
+  /**
+   * Determines if a vault is considered filled based on utilization threshold
+   * @param currentSupply Current total supply of LP tokens
+   * @param totalSupplyCap Maximum allowed total supply (cap)
+   * @returns true if utilization >= threshold (default 98%)
+   */
+  private isVaultFilled(currentSupply: bigint, totalSupplyCap: bigint): boolean {
+    if (totalSupplyCap === 0n) {
+      return false; // Can't be filled if cap is zero
+    }
+    
+    // Calculate utilization: (currentSupply / totalSupplyCap) * 100
+    // Use basis points (10000 = 100%) for precision
+    const utilizationBasisPoints = (currentSupply * 10000n) / totalSupplyCap;
+    const thresholdBasisPoints = BigInt(Math.floor(CONFIG.FILLED_THRESHOLD_PERCENT * 100));
+    
+    return utilizationBasisPoints >= thresholdBasisPoints;
+  }
+
   async start(): Promise<void> {
     console.log('Starting Vault Monitor...');
     console.log(`AMM Factory: ${CONFIG.AMM_FACTORY_ADDRESS}`);
@@ -128,6 +147,37 @@ export class VaultMonitor {
     this.cachedLiveVaultsTimestamp = 0;
   }
 
+  /**
+   * Fetches the deposit token symbol for a vault by querying the market contract
+   * @param marketAddress The address of the market contract
+   * @returns The token symbol (e.g., "BTC", "USDT", "ETH") or null if unavailable
+   */
+  private async fetchDepositTokenSymbol(marketAddress: string): Promise<string | null> {
+    try {
+      const marketContract = new ethers.Contract(marketAddress, MarketABI, this.provider);
+      const descriptorResult = await marketContract.descriptor();
+      const tokenId = descriptorResult[1]; // tokenId is at index 1
+      
+      // Check if tokenId is valid (not zero)
+      const tokenIdValue = typeof tokenId === 'bigint' ? tokenId : BigInt(tokenId);
+      if (tokenIdValue === 0n) {
+        return null;
+      }
+
+      const tokenAddress = await this.marketHub.tokenIdToAddress(tokenId);
+      if (!tokenAddress || tokenAddress === ethers.ZeroAddress) {
+        return null;
+      }
+
+      const tokenContract = new ethers.Contract(tokenAddress, ERC20ABI, this.provider);
+      const symbol = await tokenContract.symbol();
+      return symbol;
+    } catch (error) {
+      console.warn(`Could not fetch token symbol for market ${marketAddress}:`, error);
+      return null;
+    }
+  }
+
   private async getLiveVaults(): Promise<Array<VaultState & { depositCurrency: string; utilization: number }>> {
     const allVaults = this.stateManager.getAllVaults();
     const liveVaults: Array<VaultState & { depositCurrency: string; utilization: number }> = [];
@@ -151,30 +201,21 @@ export class VaultMonitor {
           ammContract.totalSupplyCap(),
         ]);
 
-        // Check if filled
-        if (currentSupply >= totalSupplyCap) {
+        // Check if filled (using utilization threshold)
+        if (this.isVaultFilled(currentSupply, totalSupplyCap)) {
           continue; // Skip filled vaults
         }
 
         // Get deposit currency (token symbol)
-        let depositCurrency = vault.symbol; // Fallback to vault symbol
-        try {
-          const descriptorResult = await marketContract.descriptor();
-          const tokenId = descriptorResult[1]; // tokenId is at index 1
-          
-          // Check if tokenId is valid (not zero)
-          // TokenId is a uint16 wrapped type, check if it's not zero
-          // In ethers.js, custom types are returned as their underlying value
-          const tokenIdValue = typeof tokenId === 'bigint' ? tokenId : BigInt(tokenId);
-          if (tokenIdValue !== 0n) {
-            const tokenAddress = await this.marketHub.tokenIdToAddress(tokenId);
-            if (tokenAddress && tokenAddress !== ethers.ZeroAddress) {
-              const tokenContract = new ethers.Contract(tokenAddress, ERC20ABI, this.provider);
-              depositCurrency = await tokenContract.symbol();
-            }
+        // Use cached token symbol if available, otherwise fetch it
+        let depositCurrency = vault.depositTokenSymbol || vault.symbol; // Fallback to vault symbol
+        if (!vault.depositTokenSymbol) {
+          const tokenSymbol = await this.fetchDepositTokenSymbol(vault.marketAddress);
+          if (tokenSymbol) {
+            depositCurrency = tokenSymbol;
           }
-        } catch (error) {
-          console.warn(`Could not get token symbol for vault ${vault.address}:`, error);
+        } else {
+          depositCurrency = vault.depositTokenSymbol;
         }
 
         const utilization = totalSupplyCap > 0n 
@@ -187,6 +228,7 @@ export class VaultMonitor {
           utilization,
           lastKnownTotalSupply: currentSupply,
           totalSupplyCap: totalSupplyCap,
+          depositTokenSymbol: depositCurrency, // Ensure it's set
         });
       } catch (error) {
         console.error(`Error processing vault ${vault.address}:`, error);
@@ -215,9 +257,10 @@ export class VaultMonitor {
       
       // Remove "Boros AMM - " prefix from vault name
       const displayName = vault.name.replace(/^Boros AMM - /, '');
+      const tokenSymbol = vault.depositTokenSymbol || vault.depositCurrency || 'N/A';
 
       message += `${i + 1}. ${status} *${displayName}*\n`;
-      message += `   💰 Currency: ${vault.depositCurrency}\n`;
+      message += `   🪙 Token: ${tokenSymbol}\n`;
       message += `   📅 Expires: ${maturityDate}\n`;
       message += `   📊 Utilization: ${vault.utilization.toFixed(2)}%\n`;
       message += `   💵 Cap: ${this.notifier['formatNumber'](vault.totalSupplyCap)}\n`;
@@ -413,17 +456,21 @@ export class VaultMonitor {
             const latestFTime = await marketContract.getLatestFTime();
             const isExpired = latestFTime >= maturity;
 
+            // Fetch deposit token symbol
+            const depositTokenSymbol = await this.fetchDepositTokenSymbol(marketAddress);
+
             const vault: VaultState = {
               address: ammAddress,
               name: name,
               symbol: symbol,
               totalSupplyCap: totalSupplyCap,
               lastKnownTotalSupply: totalSupply,
-              isFilled: totalSupply >= totalSupplyCap,
+              isFilled: this.isVaultFilled(totalSupply, totalSupplyCap),
               maturity: maturity,
               marketAddress: marketAddress,
               lastCheckedBlock: event.blockNumber,
               createdAt: event.blockNumber, // Use block number as proxy for creation time
+              depositTokenSymbol: depositTokenSymbol || undefined,
             };
 
             this.stateManager.addVault(vault);
@@ -526,17 +573,21 @@ export class VaultMonitor {
           const latestFTime = await marketContract.getLatestFTime();
           const isExpired = latestFTime >= maturity;
 
+          // Fetch deposit token symbol
+          const depositTokenSymbol = await this.fetchDepositTokenSymbol(marketAddress);
+
           const vault: VaultState = {
             address: ammAddress,
             name: name,
             symbol: symbol,
             totalSupplyCap: totalSupplyCap,
             lastKnownTotalSupply: totalSupply,
-            isFilled: totalSupply >= totalSupplyCap,
+            isFilled: this.isVaultFilled(totalSupply, totalSupplyCap),
             maturity: maturity,
             marketAddress: marketAddress,
             lastCheckedBlock: event.blockNumber,
             createdAt: Date.now(),
+            depositTokenSymbol: depositTokenSymbol || undefined,
           };
 
           this.stateManager.addVault(vault);
@@ -592,7 +643,7 @@ export class VaultMonitor {
             
             // Update vault state
             const wasFilled = vault.isFilled;
-            const isNowFilled = currentSupply >= newCap;
+            const isNowFilled = this.isVaultFilled(currentSupply, newCap);
             
             this.stateManager.updateVault(vault.address, {
               totalSupplyCap: newCap,
@@ -660,7 +711,7 @@ export class VaultMonitor {
       ]);
 
       const wasFilled = vault.isFilled;
-      const isNowFilled = totalSupply >= totalSupplyCap;
+      const isNowFilled = this.isVaultFilled(totalSupply, totalSupplyCap);
 
       // Update if cap changed
       if (totalSupplyCap !== vault.totalSupplyCap) {
