@@ -39,7 +39,8 @@ export class TelegramNotifier {
   }
 
   private getTokenSymbol(vault: VaultState): string {
-    return vault.depositTokenSymbol || 'N/A';
+    // Try depositTokenSymbol first, then fallback to vault symbol, then N/A
+    return vault.depositTokenSymbol || vault.symbol || 'N/A';
   }
 
   async notifyNewVault(vault: VaultState, isFilled: boolean): Promise<void> {

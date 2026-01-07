@@ -156,24 +156,29 @@ export class VaultMonitor {
     try {
       const marketContract = new ethers.Contract(marketAddress, MarketABI, this.provider);
       const descriptorResult = await marketContract.descriptor();
-      const tokenId = descriptorResult[1]; // tokenId is at index 1
+      const tokenId = descriptorResult[1]; // tokenId is at index 1, returned as bytes16
       
       // Check if tokenId is valid (not zero)
-      const tokenIdValue = typeof tokenId === 'bigint' ? tokenId : BigInt(tokenId);
-      if (tokenIdValue === 0n) {
+      // bytes16 zero is 0x00000000000000000000000000000000
+      const tokenIdHex = typeof tokenId === 'string' ? tokenId : ethers.hexlify(tokenId);
+      if (!tokenIdHex || tokenIdHex === '0x00000000000000000000000000000000' || tokenIdHex === '0x') {
+        console.warn(`TokenId is zero for market ${marketAddress}`);
         return null;
       }
 
+      // tokenIdToAddress expects bytes16, which tokenId already is
       const tokenAddress = await this.marketHub.tokenIdToAddress(tokenId);
       if (!tokenAddress || tokenAddress === ethers.ZeroAddress) {
+        console.warn(`Token address is zero for tokenId ${tokenIdHex} in market ${marketAddress}`);
         return null;
       }
 
       const tokenContract = new ethers.Contract(tokenAddress, ERC20ABI, this.provider);
       const symbol = await tokenContract.symbol();
+      console.log(`Successfully fetched token symbol: ${symbol} for market ${marketAddress}`);
       return symbol;
-    } catch (error) {
-      console.warn(`Could not fetch token symbol for market ${marketAddress}:`, error);
+    } catch (error: any) {
+      console.warn(`Could not fetch token symbol for market ${marketAddress}:`, error?.message || error);
       return null;
     }
   }
@@ -702,6 +707,15 @@ export class VaultMonitor {
       if (isExpired) {
         console.log(`Vault ${vault.address} is expired, skipping status check`);
         return;
+      }
+
+      // Backfill token symbol if missing
+      if (!vault.depositTokenSymbol) {
+        const tokenSymbol = await this.fetchDepositTokenSymbol(vault.marketAddress);
+        if (tokenSymbol) {
+          this.stateManager.updateVault(vault.address, { depositTokenSymbol: tokenSymbol });
+          vault.depositTokenSymbol = tokenSymbol;
+        }
       }
 
       const ammContract = new ethers.Contract(vault.address, AMMABI, this.provider);

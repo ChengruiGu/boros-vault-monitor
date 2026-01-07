@@ -3,5 +3,6 @@ dist/
 .env
 vault-state.json
 *.log
+deploy.log
 .DS_Store
 
