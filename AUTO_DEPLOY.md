@@ -28,12 +28,26 @@ This method uses a webhook server that GitHub calls when you push code.
    pm2 save
    ```
 
-### Step 2: Configure GitHub Webhook
+### Step 2: Set up HTTPS (Required for Production)
+
+GitHub requires HTTPS when using webhook secrets. See the "Using HTTPS for Webhook" section below for detailed instructions.
+
+**Quick option:** Use nginx + Let's Encrypt (free SSL):
+```bash
+# Install nginx and certbot
+sudo apt install nginx certbot python3-certbot-nginx
+
+# Configure nginx (see detailed instructions below)
+# Get SSL certificate
+sudo certbot --nginx -d your-domain.com
+```
+
+### Step 3: Configure GitHub Webhook
 
 1. Go to your GitHub repository
 2. Click **Settings** → **Webhooks** → **Add webhook**
 3. Configure:
-   - **Payload URL**: `http://your-server-ip:3000/webhook`
+   - **Payload URL**: `https://your-domain.com/webhook` (use HTTPS!)
    - **Content type**: `application/json`
    - **Secret**: The same secret you set in `.env`
    - **Events**: Select "Just the push event"
@@ -41,7 +55,9 @@ This method uses a webhook server that GitHub calls when you push code.
 
 4. Click **Add webhook**
 
-### Step 3: Test
+**Note:** If you don't have a domain yet, you can use ngrok for testing (see below), but use nginx + Let's Encrypt for production.
+
+### Step 4: Test
 
 1. Make a small change and push to GitHub:
    ```bash
@@ -170,29 +186,155 @@ bash scripts/deploy.sh
    pm2 restart boros-vault-monitor
    ```
 
-## Advanced: Using nginx as Reverse Proxy
+## Using HTTPS for Webhook (Recommended)
 
-If you want to use HTTPS and a domain:
+GitHub requires HTTPS for webhooks when using a secret. Here are the best options:
+
+### Option A: nginx Reverse Proxy with Let's Encrypt (Recommended)
+
+This is the most common and secure approach.
+
+#### Step 1: Install nginx and Certbot
+
+```bash
+# On Ubuntu/Debian
+sudo apt update
+sudo apt install nginx certbot python3-certbot-nginx
+
+# On Amazon Linux
+sudo yum install nginx certbot python3-certbot-nginx
+```
+
+#### Step 2: Configure nginx
+
+Create nginx configuration:
+
+```bash
+sudo nano /etc/nginx/sites-available/webhook
+```
+
+Add this configuration:
 
 ```nginx
-# /etc/nginx/sites-available/webhook
 server {
-    listen 443 ssl;
-    server_name your-domain.com;
-    
-    ssl_certificate /path/to/cert.pem;
-    ssl_certificate_key /path/to/key.pem;
+    listen 80;
+    server_name your-domain.com;  # Replace with your domain
     
     location /webhook {
         proxy_pass http://localhost:3000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+    
+    location /health {
+        proxy_pass http://localhost:3000;
     }
 }
 ```
 
-Then point GitHub webhook to: `https://your-domain.com/webhook`
+Enable the site:
+
+```bash
+sudo ln -s /etc/nginx/sites-available/webhook /etc/nginx/sites-enabled/
+sudo nginx -t  # Test configuration
+sudo systemctl restart nginx
+```
+
+#### Step 3: Get SSL Certificate with Let's Encrypt
+
+```bash
+# Get free SSL certificate
+sudo certbot --nginx -d your-domain.com
+
+# Certbot will automatically:
+# - Get SSL certificate
+# - Configure nginx for HTTPS
+# - Set up auto-renewal
+```
+
+#### Step 4: Update GitHub Webhook
+
+Point GitHub webhook to: `https://your-domain.com/webhook`
+
+#### Step 5: Verify
+
+Test the webhook endpoint:
+
+```bash
+curl https://your-domain.com/health
+# Should return: OK
+```
+
+### Option B: Direct HTTPS in Node.js (Advanced)
+
+If you prefer not to use nginx, you can configure HTTPS directly in the webhook server:
+
+1. **Get SSL certificates** (Let's Encrypt or your own)
+2. **Update `scripts/webhook-server.js`** to use HTTPS:
+
+```javascript
+const https = require('https');
+const fs = require('fs');
+
+const options = {
+  key: fs.readFileSync('/path/to/private-key.pem'),
+  cert: fs.readFileSync('/path/to/certificate.pem')
+};
+
+const server = https.createServer(options, (req, res) => {
+  // ... rest of the code
+});
+```
+
+### Option C: ngrok (For Development/Testing)
+
+For quick testing without a domain:
+
+```bash
+# Install ngrok
+# Download from https://ngrok.com/download
+
+# Start your webhook server
+pm2 start scripts/webhook-server.js --name webhook-server
+
+# In another terminal, expose it
+ngrok http 3000
+
+# Use the HTTPS URL ngrok provides:
+# Example: https://abc123.ngrok.io/webhook
+```
+
+**Note:** ngrok URLs change on free tier. Use nginx + Let's Encrypt for production.
+
+### Option D: Cloudflare Tunnel (Free Alternative)
+
+If you don't have a domain or want to avoid port forwarding:
+
+1. Create a Cloudflare account
+2. Install `cloudflared`:
+   ```bash
+   # On Linux
+   curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared
+   chmod +x /usr/local/bin/cloudflared
+   ```
+
+3. Create a tunnel:
+   ```bash
+   cloudflared tunnel create webhook
+   cloudflared tunnel route dns webhook your-subdomain.yourdomain.com
+   cloudflared tunnel run webhook --url http://localhost:3000
+   ```
+
+4. Use: `https://your-subdomain.yourdomain.com/webhook`
+
+### Security Notes
+
+- **Always use HTTPS** when exposing webhooks to the internet
+- **Set a strong `GITHUB_WEBHOOK_SECRET`** - this is required for HTTPS webhooks
+- **Keep certificates updated** - Let's Encrypt auto-renews, but verify it's working
+- **Use firewall rules** - Only allow necessary ports (443 for HTTPS, 80 for Let's Encrypt)
 
 ## Notes
 

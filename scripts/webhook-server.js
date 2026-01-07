@@ -6,7 +6,10 @@
  * Usage:
  *   1. Set GITHUB_WEBHOOK_SECRET in your environment
  *   2. Run: node scripts/webhook-server.js
- *   3. Configure GitHub webhook to point to: http://your-server:3000/webhook
+ *   3. Configure GitHub webhook to point to: https://your-domain.com/webhook
+ * 
+ * For HTTPS, use nginx as reverse proxy (recommended) or configure HTTPS directly.
+ * See AUTO_DEPLOY.md for detailed HTTPS setup instructions.
  * 
  * For production, use PM2:
  *   pm2 start scripts/webhook-server.js --name webhook-server
