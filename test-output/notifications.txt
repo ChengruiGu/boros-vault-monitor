@@ -1,0 +1,170 @@
+
+============================================================
+[2026-01-31T07:53:50.035Z]
+
+============================================================
+BOT OUTPUT TEST - Generated Notifications
+
+
+============================================================
+[2026-01-31T07:53:50.045Z]
+
+============================================================
+--- NEW VAULT (AVAILABLE) ---
+
+🚀 *New Vault Created!*
+
+*Name:* Boros AMM - BTC Vault
+*Symbol:* bAMM-BTC
+*🪙 Token:* BTC
+*Address:* `0x1234567890123456789012345678901234567890`
+*Status:* 🟢 AVAILABLE
+
+*Cap:* 1000.000000
+*Current Supply:* 500.000000
+*Maturity:* 3/2/2026, 3:53:50 PM
+
+[View on Arbiscan](https://arbiscan.io/address/0x1234567890123456789012345678901234567890)
+
+============================================================
+[2026-01-31T07:53:50.045Z]
+
+============================================================
+--- NEW VAULT (FILLED) ---
+
+🚀 *New Vault Created!*
+
+*Name:* Boros AMM - BTC Vault
+*Symbol:* bAMM-BTC
+*🪙 Token:* BTC
+*Address:* `0x1234567890123456789012345678901234567890`
+*Status:* 🔴 FULLY FILLED
+
+*Cap:* 1000.000000
+*Current Supply:* 980.000000
+*Maturity:* 3/2/2026, 3:53:50 PM
+
+[View on Arbiscan](https://arbiscan.io/address/0x1234567890123456789012345678901234567890)
+
+============================================================
+[2026-01-31T07:53:50.045Z]
+
+============================================================
+--- CAP RAISED (NOW AVAILABLE) ---
+
+📈 *Vault Cap Raised!*
+
+*Vault:* Boros AMM - BTC Vault (bAMM-BTC)
+*🪙 Token:* BTC
+*Address:* `0x1234567890123456789012345678901234567890`
+*Status:* 🟢 NOW AVAILABLE
+
+*Old Cap:* 500.000000
+*New Cap:* 1000.000000
+*Current Supply:* 450.000000
+*Maturity:* 3/2/2026, 3:53:50 PM
+
+*Available Space:* 550.000000
+
+[View on Arbiscan](https://arbiscan.io/address/0x1234567890123456789012345678901234567890)
+
+============================================================
+[2026-01-31T07:53:50.045Z]
+
+============================================================
+--- CAP RAISED (STILL FULL) ---
+
+📈 *Vault Cap Raised!*
+
+*Vault:* Boros AMM - BTC Vault (bAMM-BTC)
+*🪙 Token:* BTC
+*Address:* `0x1234567890123456789012345678901234567890`
+*Status:* 🟢 NOW AVAILABLE
+
+*Old Cap:* 500.000000
+*New Cap:* 1000.000000
+*Current Supply:* 980.000000
+*Maturity:* 3/2/2026, 3:53:50 PM
+
+*Available Space:* 20.000000
+
+[View on Arbiscan](https://arbiscan.io/address/0x1234567890123456789012345678901234567890)
+
+============================================================
+[2026-01-31T07:53:50.045Z]
+
+============================================================
+--- VAULT FILLED ---
+
+🔴 *Vault Filled!*
+
+*Vault:* Boros AMM - BTC Vault (bAMM-BTC)
+*🪙 Token:* BTC
+*Address:* `0x1234567890123456789012345678901234567890`
+
+*Cap:* 1000.000000
+*Current Supply:* 980.000000
+
+[View on Arbiscan](https://arbiscan.io/address/0x1234567890123456789012345678901234567890)
+
+============================================================
+[2026-01-31T07:53:50.045Z]
+
+============================================================
+--- VAULT AVAILABLE AGAIN ---
+
+🟢 *Vault Available Again!*
+
+*Vault:* Boros AMM - BTC Vault (bAMM-BTC)
+*🪙 Token:* BTC
+*Address:* `0x1234567890123456789012345678901234567890`
+
+*Cap:* 1000.000000
+*Current Supply:* 700.000000
+*Available Space:* 300.000000
+*Maturity:* 3/2/2026, 3:53:50 PM
+
+[View on Arbiscan](https://arbiscan.io/address/0x1234567890123456789012345678901234567890)
+
+============================================================
+[2026-01-31T07:53:50.046Z]
+
+============================================================
+--- LIVE VAULTS LIST (SAMPLE) ---
+
+📊 *Live Vaults* (3)
+
+1. 🟢 *BTC Vault*
+   🪙 Token: BTC
+   📅 Expires: 3/2/2026
+   📊 Utilization: 45.50%
+   💵 Cap: 1000.000000
+   📈 Current: 500.000000
+   ✅ Available: 500.000000
+   🔗 [View](https://arbiscan.io/address/0x1234567890123456789012345678901234567890)
+
+2. 🟢 *ETH Vault*
+   🪙 Token: ETH
+   📅 Expires: 3/2/2026
+   📊 Utilization: 72.30%
+   💵 Cap: 1000.000000
+   📈 Current: 500.000000
+   ✅ Available: 500.000000
+   🔗 [View](https://arbiscan.io/address/0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1)
+
+3. 🟢 *USDT Vault*
+   🪙 Token: USDT
+   📅 Expires: 3/2/2026
+   📊 Utilization: 15.80%
+   💵 Cap: 1000.000000
+   📈 Current: 500.000000
+   ✅ Available: 500.000000
+   🔗 [View](https://arbiscan.io/address/0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa2)
+
+============================================================
+[2026-01-31T07:53:50.046Z]
+
+============================================================
+--- EMPTY LIVE VAULTS ---
+
+❌ No live vaults found.

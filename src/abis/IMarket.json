@@ -22,14 +22,14 @@
         "type": "bool"
       },
       {
-        "internalType": "bytes16",
+        "internalType": "uint16",
         "name": "tokenId",
-        "type": "bytes16"
+        "type": "uint16"
       },
       {
-        "internalType": "bytes24",
+        "internalType": "uint24",
         "name": "marketId",
-        "type": "bytes24"
+        "type": "uint24"
       },
       {
         "internalType": "uint32",

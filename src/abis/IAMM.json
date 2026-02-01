@@ -78,6 +78,19 @@
     "type": "function"
   },
   {
+    "inputs": [],
+    "name": "SELF_ACC",
+    "outputs": [
+      {
+        "internalType": "bytes26",
+        "name": "",
+        "type": "bytes26"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
     "anonymous": false,
     "inputs": [
       {

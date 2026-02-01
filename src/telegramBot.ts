@@ -1,8 +1,8 @@
 import TelegramBot from 'node-telegram-bot-api';
 import { CONFIG } from './config';
-import { VaultState } from './types';
+import { AvailableDepositInfo, Notifier, VaultState } from './types';
 
-export class TelegramNotifier {
+export class TelegramNotifier implements Notifier {
   private bot: TelegramBot;
   private commandHandlers: Map<string, (msg: TelegramBot.Message) => Promise<void>> = new Map();
 
@@ -43,12 +43,26 @@ export class TelegramNotifier {
     return vault.depositTokenSymbol || vault.symbol || 'N/A';
   }
 
-  async notifyNewVault(vault: VaultState, isFilled: boolean): Promise<void> {
+  private formatDepositInfo(vault: VaultState, depositInfo?: AvailableDepositInfo): string {
+    if (!depositInfo) {
+      return '';
+    }
+    const tokenSymbol = this.getTokenSymbol(vault);
+    return `
+*--- Deposit Calculation ---*
+*LP Price:* ${depositInfo.lpPrice.toFixed(6)}
+*Available LP Capacity:* ${depositInfo.availableLpCapacity.toString()}
+*💰 Available Deposit:* ${depositInfo.availableDeposit.toFixed(2)} ${tokenSymbol}
+`;
+  }
+
+  async notifyNewVault(vault: VaultState, isFilled: boolean, depositInfo?: AvailableDepositInfo): Promise<void> {
     const arbiscanUrl = `https://arbiscan.io/address/${vault.address}`;
     const status = isFilled ? '🔴 FULLY FILLED' : '🟢 AVAILABLE';
     const maturityDate = new Date(Number(vault.maturity) * 1000).toLocaleString();
     const tokenSymbol = this.getTokenSymbol(vault);
-    
+    const depositInfoStr = this.formatDepositInfo(vault, depositInfo);
+
     const message = `
 🚀 *New Vault Created!*
 
@@ -61,20 +75,21 @@ export class TelegramNotifier {
 *Cap:* ${this.formatNumber(vault.totalSupplyCap)}
 *Current Supply:* ${this.formatNumber(vault.lastKnownTotalSupply)}
 *Maturity:* ${maturityDate}
-
+${depositInfoStr}
 [View on Arbiscan](${arbiscanUrl})
     `.trim();
 
     await this.sendMessage(message);
   }
 
-  async notifyCapRaised(vault: VaultState, oldCap: bigint, newCap: bigint, currentSupply: bigint): Promise<void> {
+  async notifyCapRaised(vault: VaultState, oldCap: bigint, newCap: bigint, currentSupply: bigint, depositInfo?: AvailableDepositInfo): Promise<void> {
     const arbiscanUrl = `https://arbiscan.io/address/${vault.address}`;
     const isNowAvailable = currentSupply < newCap;
     const status = isNowAvailable ? '🟢 NOW AVAILABLE' : '🔴 STILL FULL';
     const maturityDate = new Date(Number(vault.maturity) * 1000).toLocaleString();
     const tokenSymbol = this.getTokenSymbol(vault);
-    
+    const depositInfoStr = this.formatDepositInfo(vault, depositInfo);
+
     const message = `
 📈 *Vault Cap Raised!*
 
@@ -89,7 +104,7 @@ export class TelegramNotifier {
 *Maturity:* ${maturityDate}
 
 *Available Space:* ${this.formatNumber(newCap - currentSupply)}
-
+${depositInfoStr}
 [View on Arbiscan](${arbiscanUrl})
     `.trim();
 
@@ -116,12 +131,13 @@ export class TelegramNotifier {
     await this.sendMessage(message);
   }
 
-  async notifyVaultAvailable(vault: VaultState, currentSupply: bigint): Promise<void> {
+  async notifyVaultAvailable(vault: VaultState, currentSupply: bigint, depositInfo?: AvailableDepositInfo): Promise<void> {
     const arbiscanUrl = `https://arbiscan.io/address/${vault.address}`;
     const maturityDate = new Date(Number(vault.maturity) * 1000).toLocaleString();
     const available = vault.totalSupplyCap - currentSupply;
     const tokenSymbol = this.getTokenSymbol(vault);
-    
+    const depositInfoStr = this.formatDepositInfo(vault, depositInfo);
+
     const message = `
 🟢 *Vault Available Again!*
 
@@ -133,7 +149,7 @@ export class TelegramNotifier {
 *Current Supply:* ${this.formatNumber(currentSupply)}
 *Available Space:* ${this.formatNumber(available)}
 *Maturity:* ${maturityDate}
-
+${depositInfoStr}
 [View on Arbiscan](${arbiscanUrl})
     `.trim();
 

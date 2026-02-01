@@ -2,9 +2,9 @@
   {
     "inputs": [
       {
-        "internalType": "bytes16",
+        "internalType": "uint16",
         "name": "tokenId",
-        "type": "bytes16"
+        "type": "uint16"
       }
     ],
     "name": "tokenIdToAddress",
@@ -13,6 +13,25 @@
         "internalType": "address",
         "name": "",
         "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes26",
+        "name": "user",
+        "type": "bytes26"
+      }
+    ],
+    "name": "accCash",
+    "outputs": [
+      {
+        "internalType": "int256",
+        "name": "",
+        "type": "int256"
       }
     ],
     "stateMutability": "view",

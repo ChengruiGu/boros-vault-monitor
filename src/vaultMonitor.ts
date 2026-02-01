@@ -2,7 +2,8 @@ import { ethers } from 'ethers';
 import { CONFIG } from './config';
 import { StateManager } from './stateManager';
 import { TelegramNotifier } from './telegramBot';
-import { VaultState } from './types';
+import { FileNotifier } from './fileNotifier';
+import { Notifier, VaultState } from './types';
 import AMMFactoryABI from './abis/IAMMFactory.json';
 import AMMABI from './abis/IAMM.json';
 import MarketABI from './abis/IMarket.json';
@@ -15,7 +16,8 @@ export class VaultMonitor {
   private ammFactory: ethers.Contract;
   private marketHub: ethers.Contract;
   private stateManager: StateManager;
-  private notifier: TelegramNotifier;
+  private notifier: Notifier;
+  private telegramNotifier: TelegramNotifier | null = null;
   private isRunning: boolean = false;
   
   // Cache for live vaults message
@@ -40,14 +42,25 @@ export class VaultMonitor {
       this.provider
     );
     this.stateManager = new StateManager();
-    this.notifier = new TelegramNotifier();
-    this.setupCommands();
+
+    // Initialize notifier based on output mode
+    if (CONFIG.OUTPUT_MODE === 'file') {
+      console.log('Using file output mode');
+      this.notifier = new FileNotifier(CONFIG.OUTPUT_FILE);
+    } else {
+      console.log('Using Telegram output mode');
+      this.telegramNotifier = new TelegramNotifier();
+      this.notifier = this.telegramNotifier;
+      this.setupCommands();
+    }
   }
 
   private setupCommands(): void {
-    this.notifier.registerCommand('liveVaults', async (msg) => {
-      await this.handleLiveVaultsCommand(msg);
-    });
+    if (this.telegramNotifier) {
+      this.telegramNotifier.registerCommand('liveVaults', async (msg) => {
+        await this.handleLiveVaultsCommand(msg);
+      });
+    }
   }
 
   /**
@@ -73,34 +86,43 @@ export class VaultMonitor {
     console.log('Starting Vault Monitor...');
     console.log(`AMM Factory: ${CONFIG.AMM_FACTORY_ADDRESS}`);
     console.log(`RPC URL: ${CONFIG.RPC_URL}`);
+    console.log(`Output Mode: ${CONFIG.OUTPUT_MODE}`);
 
-    // Setup Telegram command listeners
-    const bot = this.notifier.getBot();
-    bot.onText(/\/liveVaults/, async (msg) => {
-      await this.handleLiveVaultsCommand(msg);
-    });
+    // Setup Telegram command listeners (only in Telegram mode)
+    if (this.telegramNotifier) {
+      const bot = this.telegramNotifier.getBot();
+      bot.onText(/\/liveVaults/, async (msg) => {
+        await this.handleLiveVaultsCommand(msg);
+      });
+    }
 
     // Send test message
     await this.notifier.sendTestMessage();
 
     // Load existing vaults and start monitoring
     await this.loadExistingVaults();
-    
+
     this.isRunning = true;
     await this.monitor();
   }
 
   private async handleLiveVaultsCommand(msg: TelegramBot.Message): Promise<void> {
+    if (!this.telegramNotifier) {
+      console.log('Telegram commands not available in file output mode');
+      return;
+    }
+
     try {
       const chatId = msg.chat.id;
-      
+      const bot = this.telegramNotifier.getBot();
+
       // Check if we have a valid cached message
       const now = Date.now();
       const cacheAge = now - this.cachedLiveVaultsTimestamp;
-      
+
       if (this.cachedLiveVaultsMessage && cacheAge < this.LIVE_VAULTS_CACHE_TTL_MS) {
         // Use cached message
-        await this.notifier.getBot().sendMessage(chatId, this.cachedLiveVaultsMessage, {
+        await bot.sendMessage(chatId, this.cachedLiveVaultsMessage, {
           parse_mode: 'Markdown',
           disable_web_page_preview: true,
         });
@@ -108,37 +130,39 @@ export class VaultMonitor {
       }
 
       // Cache expired or doesn't exist, fetch fresh data
-      await this.notifier.getBot().sendMessage(chatId, '📊 Fetching live vaults...', {
+      await bot.sendMessage(chatId, '📊 Fetching live vaults...', {
         parse_mode: 'Markdown',
       });
 
       const liveVaults = await this.getLiveVaults();
-      
+
       if (liveVaults.length === 0) {
         const emptyMessage = '❌ No live vaults found.';
         this.cachedLiveVaultsMessage = emptyMessage;
         this.cachedLiveVaultsTimestamp = now;
-        await this.notifier.getBot().sendMessage(chatId, emptyMessage, {
+        await bot.sendMessage(chatId, emptyMessage, {
           parse_mode: 'Markdown',
         });
         return;
       }
 
       const message = this.formatLiveVaultsList(liveVaults);
-      
+
       // Update cache
       this.cachedLiveVaultsMessage = message;
       this.cachedLiveVaultsTimestamp = now;
-      
-      await this.notifier.getBot().sendMessage(chatId, message, {
+
+      await bot.sendMessage(chatId, message, {
         parse_mode: 'Markdown',
         disable_web_page_preview: true,
       });
     } catch (error) {
       console.error('Error handling liveVaults command:', error);
-      await this.notifier.getBot().sendMessage(msg.chat.id, '❌ Error fetching vaults. Please try again later.', {
-        parse_mode: 'Markdown',
-      });
+      if (this.telegramNotifier) {
+        await this.telegramNotifier.getBot().sendMessage(msg.chat.id, '❌ Error fetching vaults. Please try again later.', {
+          parse_mode: 'Markdown',
+        });
+      }
     }
   }
   
@@ -148,37 +172,111 @@ export class VaultMonitor {
   }
 
   /**
-   * Fetches the deposit token symbol for a vault by querying the market contract
+   * Fetches the deposit/collateral token info for a vault by querying the market contract
    * @param marketAddress The address of the market contract
-   * @returns The token symbol (e.g., "BTC", "USDT", "ETH") or null if unavailable
+   * @returns Token info object with symbol and decimals, or null if unavailable
    */
-  private async fetchDepositTokenSymbol(marketAddress: string): Promise<string | null> {
+  private async fetchDepositTokenInfo(marketAddress: string): Promise<{ symbol: string; decimals: number } | null> {
     try {
       const marketContract = new ethers.Contract(marketAddress, MarketABI, this.provider);
       const descriptorResult = await marketContract.descriptor();
-      const tokenId = descriptorResult[1]; // tokenId is at index 1, returned as bytes16
-      
+      const tokenId = descriptorResult[1]; // tokenId is at index 1, returned as uint16
+
       // Check if tokenId is valid (not zero)
-      // bytes16 zero is 0x00000000000000000000000000000000
-      const tokenIdHex = typeof tokenId === 'string' ? tokenId : ethers.hexlify(tokenId);
-      if (!tokenIdHex || tokenIdHex === '0x00000000000000000000000000000000' || tokenIdHex === '0x') {
+      if (!tokenId || tokenId === 0n) {
         console.warn(`TokenId is zero for market ${marketAddress}`);
         return null;
       }
 
-      // tokenIdToAddress expects bytes16, which tokenId already is
+      // tokenIdToAddress expects uint16 tokenId
       const tokenAddress = await this.marketHub.tokenIdToAddress(tokenId);
       if (!tokenAddress || tokenAddress === ethers.ZeroAddress) {
-        console.warn(`Token address is zero for tokenId ${tokenIdHex} in market ${marketAddress}`);
+        console.warn(`Token address is zero for tokenId ${tokenId} in market ${marketAddress}`);
         return null;
       }
 
       const tokenContract = new ethers.Contract(tokenAddress, ERC20ABI, this.provider);
-      const symbol = await tokenContract.symbol();
-      console.log(`Successfully fetched token symbol: ${symbol} for market ${marketAddress}`);
-      return symbol;
+      const [symbol, decimals] = await Promise.all([
+        tokenContract.symbol(),
+        tokenContract.decimals(),
+      ]);
+      console.log(`Successfully fetched collateral token: ${symbol} (${decimals} decimals) for market ${marketAddress}`);
+      return { symbol, decimals: Number(decimals) };
     } catch (error: any) {
-      console.warn(`Could not fetch token symbol for market ${marketAddress}:`, error?.message || error);
+      console.warn(`Could not fetch token info for market ${marketAddress}:`, error?.message || error);
+      return null;
+    }
+  }
+
+  /**
+   * Fetches the AMM's SELF_ACC (MarketAcc) for querying cash from MarketHub
+   * @param vaultAddress The address of the AMM vault
+   * @returns The selfAcc as a hex string, or null if unavailable
+   */
+  private async fetchSelfAcc(vaultAddress: string): Promise<string | null> {
+    try {
+      const ammContract = new ethers.Contract(vaultAddress, AMMABI, this.provider);
+      const selfAcc = await ammContract.SELF_ACC();
+      return selfAcc;
+    } catch (error: any) {
+      console.warn(`Could not fetch SELF_ACC for vault ${vaultAddress}:`, error?.message || error);
+      return null;
+    }
+  }
+
+  /**
+   * Calculates the LP price and available deposit amount for a vault
+   * LP Price = ammCash / totalSupply
+   * Available Deposit = availableLpCapacity * lpPrice
+   * @param vault The vault state
+   * @returns Object with lpPrice and availableDeposit, or null if calculation fails
+   */
+  async calculateAvailableDeposit(vault: VaultState): Promise<{ lpPrice: number; availableDeposit: number; availableLpCapacity: bigint } | null> {
+    try {
+      if (!vault.selfAcc) {
+        return null;
+      }
+
+      const ammContract = new ethers.Contract(vault.address, AMMABI, this.provider);
+      const [totalSupply, totalSupplyCap, ammCash] = await Promise.all([
+        ammContract.totalSupply(),
+        ammContract.totalSupplyCap(),
+        this.marketHub.accCash(vault.selfAcc),
+      ]);
+
+      const totalSupplyBN = BigInt(totalSupply.toString());
+      const totalSupplyCapBN = BigInt(totalSupplyCap.toString());
+      const ammCashBN = BigInt(ammCash.toString());
+
+      if (totalSupplyBN <= 0n || ammCashBN <= 0n) {
+        return null;
+      }
+
+      // In Boros, internal cash uses a scaling factor: scalingFactor = 10^(18 - tokenDecimals)
+      // When you deposit 1 token (in human terms), internal cash = 10^18
+      // So internal cash / 10^18 gives you the token amount in human-readable form
+      // This works for all tokens regardless of their native decimals
+      const DECIMALS_18 = 18;
+
+      // Calculate values as floats (all normalized to human-readable form)
+      const ammCashFloat = Number(ammCashBN) / (10 ** DECIMALS_18);  // Token amount in vault
+      const totalSupplyFloat = Number(totalSupplyBN) / (10 ** DECIMALS_18);  // LP tokens
+
+      // LP price = tokens per LP
+      const lpPrice = ammCashFloat / totalSupplyFloat;
+
+      const availableLpCapacity = totalSupplyCapBN - totalSupplyBN;
+      if (availableLpCapacity <= 0n) {
+        return { lpPrice, availableDeposit: 0, availableLpCapacity: 0n };
+      }
+
+      // Available deposit = available LP capacity * LP price
+      const availableLpCapacityFloat = Number(availableLpCapacity) / (10 ** DECIMALS_18);
+      const availableDeposit = availableLpCapacityFloat * lpPrice;
+
+      return { lpPrice, availableDeposit, availableLpCapacity };
+    } catch (error: any) {
+      console.warn(`Could not calculate available deposit for vault ${vault.address}:`, error?.message || error);
       return null;
     }
   }
@@ -215,9 +313,9 @@ export class VaultMonitor {
         // Use cached token symbol if available, otherwise fetch it
         let depositCurrency = vault.depositTokenSymbol || vault.symbol; // Fallback to vault symbol
         if (!vault.depositTokenSymbol) {
-          const tokenSymbol = await this.fetchDepositTokenSymbol(vault.marketAddress);
-          if (tokenSymbol) {
-            depositCurrency = tokenSymbol;
+          const tokenInfo = await this.fetchDepositTokenInfo(vault.marketAddress);
+          if (tokenInfo) {
+            depositCurrency = tokenInfo.symbol;
           }
         } else {
           depositCurrency = vault.depositTokenSymbol;
@@ -268,9 +366,9 @@ export class VaultMonitor {
       message += `   🪙 Token: ${tokenSymbol}\n`;
       message += `   📅 Expires: ${maturityDate}\n`;
       message += `   📊 Utilization: ${vault.utilization.toFixed(2)}%\n`;
-      message += `   💵 Cap: ${this.notifier['formatNumber'](vault.totalSupplyCap)}\n`;
-      message += `   📈 Current: ${this.notifier['formatNumber'](vault.lastKnownTotalSupply)}\n`;
-      message += `   ✅ Available: ${this.notifier['formatNumber'](available)}\n`;
+      message += `   💵 Cap: ${this.formatNumber(vault.totalSupplyCap)}\n`;
+      message += `   📈 Current: ${this.formatNumber(vault.lastKnownTotalSupply)}\n`;
+      message += `   ✅ Available: ${this.formatNumber(available)}\n`;
       message += `   🔗 [View](${arbiscanUrl})\n\n`;
     }
 
@@ -461,8 +559,11 @@ export class VaultMonitor {
             const latestFTime = await marketContract.getLatestFTime();
             const isExpired = latestFTime >= maturity;
 
-            // Fetch deposit token symbol
-            const depositTokenSymbol = await this.fetchDepositTokenSymbol(marketAddress);
+            // Fetch deposit token info and selfAcc
+            const [tokenInfo, selfAcc] = await Promise.all([
+              this.fetchDepositTokenInfo(marketAddress),
+              this.fetchSelfAcc(ammAddress),
+            ]);
 
             const vault: VaultState = {
               address: ammAddress,
@@ -475,7 +576,9 @@ export class VaultMonitor {
               marketAddress: marketAddress,
               lastCheckedBlock: event.blockNumber,
               createdAt: event.blockNumber, // Use block number as proxy for creation time
-              depositTokenSymbol: depositTokenSymbol || undefined,
+              depositTokenSymbol: tokenInfo?.symbol || undefined,
+              depositTokenDecimals: tokenInfo?.decimals || undefined,
+              selfAcc: selfAcc || undefined,
             };
 
             this.stateManager.addVault(vault);
@@ -578,8 +681,11 @@ export class VaultMonitor {
           const latestFTime = await marketContract.getLatestFTime();
           const isExpired = latestFTime >= maturity;
 
-          // Fetch deposit token symbol
-          const depositTokenSymbol = await this.fetchDepositTokenSymbol(marketAddress);
+          // Fetch deposit token info and selfAcc
+          const [tokenInfo, selfAcc] = await Promise.all([
+            this.fetchDepositTokenInfo(marketAddress),
+            this.fetchSelfAcc(ammAddress),
+          ]);
 
           const vault: VaultState = {
             address: ammAddress,
@@ -592,7 +698,9 @@ export class VaultMonitor {
             marketAddress: marketAddress,
             lastCheckedBlock: event.blockNumber,
             createdAt: Date.now(),
-            depositTokenSymbol: depositTokenSymbol || undefined,
+            depositTokenSymbol: tokenInfo?.symbol || undefined,
+            depositTokenDecimals: tokenInfo?.decimals || undefined,
+            selfAcc: selfAcc || undefined,
           };
 
           this.stateManager.addVault(vault);
@@ -602,9 +710,12 @@ export class VaultMonitor {
 
           // Only notify if vault is not expired
           if (!isExpired) {
+            // Calculate deposit info for available vaults
+            const depositInfo = !vault.isFilled ? await this.calculateAvailableDeposit(vault) : null;
+
             // Notify if vault is not filled
             if (!vault.isFilled) {
-              await this.notifier.notifyNewVault(vault, false);
+              await this.notifier.notifyNewVault(vault, false, depositInfo || undefined);
             } else {
               await this.notifier.notifyNewVault(vault, true);
             }
@@ -660,19 +771,25 @@ export class VaultMonitor {
             // Invalidate cache when cap is updated
             this.invalidateLiveVaultsCache();
 
+            // Calculate deposit info for available vaults
+            const updatedVault = { ...vault, totalSupplyCap: newCap, lastKnownTotalSupply: currentSupply };
+            const depositInfo = !isNowFilled ? await this.calculateAvailableDeposit(updatedVault) : null;
+
             // Notify about cap raise (only for live vaults)
             await this.notifier.notifyCapRaised(
-              { ...vault, totalSupplyCap: newCap, lastKnownTotalSupply: currentSupply },
+              updatedVault,
               oldCap,
               newCap,
-              currentSupply
+              currentSupply,
+              depositInfo || undefined
             );
 
             // If vault was filled and is now available, notify
             if (wasFilled && !isNowFilled) {
               await this.notifier.notifyNewVault(
                 { ...vault, totalSupplyCap: newCap, lastKnownTotalSupply: currentSupply, isFilled: false },
-                false
+                false,
+                depositInfo || undefined
               );
             }
           }
@@ -709,12 +826,28 @@ export class VaultMonitor {
         return;
       }
 
-      // Backfill token symbol if missing
-      if (!vault.depositTokenSymbol) {
-        const tokenSymbol = await this.fetchDepositTokenSymbol(vault.marketAddress);
-        if (tokenSymbol) {
-          this.stateManager.updateVault(vault.address, { depositTokenSymbol: tokenSymbol });
-          vault.depositTokenSymbol = tokenSymbol;
+      // Backfill token info and selfAcc if missing
+      if (!vault.depositTokenSymbol || !vault.depositTokenDecimals || !vault.selfAcc) {
+        const [tokenInfo, selfAcc] = await Promise.all([
+          !vault.depositTokenSymbol ? this.fetchDepositTokenInfo(vault.marketAddress) : null,
+          !vault.selfAcc ? this.fetchSelfAcc(vault.address) : null,
+        ]);
+
+        const updates: Partial<VaultState> = {};
+        if (tokenInfo && !vault.depositTokenSymbol) {
+          updates.depositTokenSymbol = tokenInfo.symbol;
+          vault.depositTokenSymbol = tokenInfo.symbol;
+        }
+        if (tokenInfo && !vault.depositTokenDecimals) {
+          updates.depositTokenDecimals = tokenInfo.decimals;
+          vault.depositTokenDecimals = tokenInfo.decimals;
+        }
+        if (selfAcc && !vault.selfAcc) {
+          updates.selfAcc = selfAcc;
+          vault.selfAcc = selfAcc;
+        }
+        if (Object.keys(updates).length > 0) {
+          this.stateManager.updateVault(vault.address, updates);
         }
       }
 
@@ -732,11 +865,16 @@ export class VaultMonitor {
         console.log(`Cap changed for ${vault.address}: ${vault.totalSupplyCap} -> ${totalSupplyCap}`);
         // Invalidate cache when cap changes
         this.invalidateLiveVaultsCache();
+
+        const updatedVault = { ...vault, totalSupplyCap, lastKnownTotalSupply: totalSupply };
+        const depositInfo = !isNowFilled ? await this.calculateAvailableDeposit(updatedVault) : null;
+
         await this.notifier.notifyCapRaised(
-          { ...vault, totalSupplyCap, lastKnownTotalSupply: totalSupply },
+          updatedVault,
           vault.totalSupplyCap,
           totalSupplyCap,
-          totalSupply
+          totalSupply,
+          depositInfo || undefined
         );
       }
 
@@ -754,14 +892,18 @@ export class VaultMonitor {
           });
         } else if (wasFilled) {
           // Vault was filled but is now available again (withdrawals happened)
+          const updatedVault = {
+            ...vault,
+            totalSupplyCap,
+            lastKnownTotalSupply: totalSupply,
+            isFilled: false,
+          };
+          const depositInfo = await this.calculateAvailableDeposit(updatedVault);
+
           await this.notifier.notifyVaultAvailable(
-            {
-              ...vault,
-              totalSupplyCap,
-              lastKnownTotalSupply: totalSupply,
-              isFilled: false,
-            },
-            totalSupply
+            updatedVault,
+            totalSupply,
+            depositInfo || undefined
           );
         }
       }

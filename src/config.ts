@@ -19,14 +19,20 @@ export const CONFIG = {
   
   // State file
   STATE_FILE: process.env.STATE_FILE || './vault-state.json',
+
+  // Output mode: 'telegram' or 'file'
+  OUTPUT_MODE: (process.env.OUTPUT_MODE || 'telegram') as 'telegram' | 'file',
+  OUTPUT_FILE: process.env.OUTPUT_FILE || './notifications.txt',
 };
 
-// Validate required config
-if (!CONFIG.TELEGRAM_BOT_TOKEN) {
-  throw new Error('TELEGRAM_BOT_TOKEN is required');
-}
+// Validate required config (skip for test scripts)
+export function validateTelegramConfig(): void {
+  if (!CONFIG.TELEGRAM_BOT_TOKEN) {
+    throw new Error('TELEGRAM_BOT_TOKEN is required');
+  }
 
-if (!CONFIG.TELEGRAM_CHAT_ID) {
-  throw new Error('TELEGRAM_CHAT_ID is required');
+  if (!CONFIG.TELEGRAM_CHAT_ID) {
+    throw new Error('TELEGRAM_CHAT_ID is required');
+  }
 }
 
